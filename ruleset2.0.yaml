@@ -1,0 +1,208 @@
+modelVersion: 2.0
+
+docker:
+  registry: https://armdocker.rnd.ericsson.se/proj-enm
+
+docker-images:
+  - adp-helm-dr-check: armdocker.rnd.ericsson.se/sandbox/adp-staging/adp-cicd/common-library-adp-helm-dr-check:latest
+  - eric-enm-version-auto: armdocker.rnd.ericsson.se/proj-enm/eric-enm-version-auto:1.1.1
+  - cnbuild-build-utilities: armdocker.rnd.ericsson.se/proj-enm/cenm-build-utilities:latest
+  - adp-release-auto: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/adp-int-helm-chart-auto:latest
+
+properties:
+  - int-lt-helm-chart-name: eric-enm-int-pm-kube-state-metrics
+  - int-lt-helm-chart-repo: https://arm.epk.ericsson.se/artifactory/proj-enm-helm/
+  - skipped-design-rules: "-DhelmDesignRule.config.DR-D1123-120=skip
+                          -DhelmDesignRule.config.DR-D1123-121=skip
+                          -DhelmDesignRule.config.DR-D470222-010=skip"
+  - disabled-design-rules: "-DhelmDesignRule.config.DR-D1121-120=disable"
+  - image-name: eric-enm-int-pm-kube-state-metrics
+  - image-repo: https://armdocker.rnd.ericsson.se/proj-enm
+  - docker-image-path: armdocker.rnd.ericsson.se/proj-enm/${image-name}
+  - docker-internal-image-path: armdocker.rnd.ericsson.se/proj_oss_releases/enm/${image-name}
+  - sidecar-docker-image-path: armdocker.rnd.ericsson.se/proj-enm/${sidecar-image-name}
+  - helm-chart-name: eric-enm-int-pm-kube-state-metrics
+  - helm-chart-repo: https://arm.epk.ericsson.se/artifactory/proj-enm-helm/eric-enm-int-pm-kube-state-metrics/
+  - chart-repo-internal: https://arm.epk.ericsson.se/artifactory/proj-enm-dev-internal-helm/
+  - chart-repo-drop: https://arm.epk.ericsson.se/artifactory/proj-enm-helm/
+  - int_chart_path: chart/eric-enm-int-pm-kube-state-metrics
+  - git_repo_url: https://gerrit-gamma.gic.ericsson.se/a/OSS/ENM-Parent/SQ-Gate/com.ericsson.oss.containerisation/eric-enm-int-pm-kube-state-metrics
+  - chart-repo-release: https://arm.epk.ericsson.se/artifactory/proj-enm-helm/
+
+
+env:
+  - ENABLE_HELM_V3 (default=true)
+  - INT_ENM_CHART (default=eric-enm-int-pm-kube-state-metrics)
+  - INT_CHART_REPO (default=https://arm.epk.ericsson.se/artifactory/proj-enm-dev-internal-helm)
+  - RELEASE (default=true)
+  - HELM_REPO_TOKEN
+  - ISO_VERSION (default=1.0.5555)
+  - BUILD_DATE (default = $(date +%d%m%Y-%H%M%S --utc))
+  - AUTHOR_NAME
+  - AUTHOR_EMAIL
+  - GERRIT_REFSPEC (default="")
+  - GIT_COMMITTER_NAME
+  - GIT_COMMITTER_EMAIL
+  - CHART_NAME
+  - CHART_REPO
+  - CHART_VERSION
+  - ARM_API_TOKEN
+  - GERRIT_USERNAME
+  - GERRIT_PASSWORD
+  - NAMESPACE
+  - INT_CHART_VERSION
+  - HELM_REPO_CREDENTIALS
+  - HELM_USER
+  - HELM_TOKEN
+  - HELM_REPO_TOKEN
+  - HELM_INTERNAL_REPO
+  - HELM_DROP_REPO
+
+var:
+  - commit-hash
+  - version
+  - version-prefix
+  - rstate
+  - pod-running-status
+  - pod-ip
+  - pod-name
+  - service-pod-name
+
+
+rules:
+  helm-dep-up-int-lt:
+    - task: helm-dep-up
+      docker-flags:
+        - "--env ENABLE_HELM_V3=${env.ENABLE_HELM_V3}"
+      docker-image: adp-release-auto
+      cmd: helm dep up chart/${int-lt-helm-chart-name}
+
+  lint-helm-int-lt:
+    - task: helm-lint
+      docker-flags:
+        - "--env ENABLE_HELM_V3=${env.ENABLE_HELM_V3}"
+      docker-image: adp-release-auto
+      cmd: helm lint chart/${int-lt-helm-chart-name}
+
+  test-helm-int-lt:
+    - task: helm-chart-check
+      docker-image: adp-helm-dr-check
+      cmd: java -DhelmDesignRule.feature.dependency=1 ${disabled-design-rules} ${skipped-design-rules} -jar /helm-dr-check.jar --helm-chart chart/${int-lt-helm-chart-name} -c
+
+  clean:
+    - task: rm
+      cmd:
+        - rm -rf .bob/
+        - rm -f artifact.properties
+
+  create-namespace:
+    - task: create-namespace
+      docker-image: cnbuild-build-utilities
+      docker-flags:
+        - "--env KUBECONFIG=.kube/admin.conf"
+      cmd: kubectl create namespace ${env.NAMESPACE}
+
+  install-helm-chart:
+    - task: install-helm-chart
+      docker-image: cnbuild-build-utilities
+      docker-flags:
+        - "--env KUBECONFIG=.kube/admin.conf"
+      cmd: helm install eric-enm-int-pm-kube-state-metrics-test eric-enm-int-pm-kube-state-metrics-${env.INT_CHART_VERSION}.tgz -n ${env.NAMESPACE} --wait --debug  --timeout 1000s
+
+  download-helm-chart:
+    - task: download-helm-chart
+      docker-image: cnbuild-build-utilities
+      docker-flags:
+        - "--env KUBECONFIG=.kube/admin.conf"
+      cmd: bash -c "helm repo add eric-enm-int-pm-kube-state-metrics ${env.INT_CHART_REPO} && helm fetch eric-enm-int-pm-kube-state-metrics/eric-enm-int-pm-kube-state-metrics --version ${env.INT_CHART_VERSION}"
+
+  test-cases:
+    - task: retrieve-pod-name
+      docker-image: cnbuild-build-utilities
+      docker-flags:
+        - "--env KUBECONFIG=.kube/admin.conf"
+      cmd: kubectl get pods -n ${env.NAMESPACE} | grep eric-pm-kube-state-metrics | awk '{ print $1 }' > .bob/var.pod-name
+
+    - task: retrieve-pod-condition
+      docker-image: cnbuild-build-utilities
+      docker-flags:
+        - "--env KUBECONFIG=.kube/admin.conf"
+      cmd: kubectl wait --for=condition=Ready pod/${var.pod-name} --timeout=300s -n ${env.NAMESPACE}
+
+    - task: retrieve-service-pod-name
+      docker-image: cnbuild-build-utilities
+      docker-flags:
+        - "--env KUBECONFIG=.kube/admin.conf"
+      cmd: kubectl get svc -n ${env.NAMESPACE} | grep eric-pm-kube-state-metrics | awk '{ print $1 }' > .bob/var.service-pod-name
+
+    - task: retrieve-pod-ip
+      docker-image: cnbuild-build-utilities
+      docker-flags:
+        - "--env KUBECONFIG=.kube/admin.conf"
+      cmd: kubectl get pods -n ${env.NAMESPACE} -o wide | grep eric-pm-kube-state-metrics | awk '{ print $6 }' > .bob/var.pod-ip
+
+    - task: pod-running-status
+      docker-image: cnbuild-build-utilities
+      docker-flags:
+        - "--env KUBECONFIG=.kube/admin.conf"
+      cmd: kubectl get pods -n ${env.NAMESPACE} -o wide | grep eric-pm-kube-state-metrics | awk '{ print $2 }' > .bob/var.pod-running-status
+
+    - task: pod-running-status-check
+      cmd: if [ "${var.pod-running-status}" == "1/1" ]; then echo "RESULT Success-- Pod is up and running"; else echo "RESULT Failed-- Pod is not up and running"; exit 1; fi
+
+
+  prepare:
+    - task: prepare-chart
+      docker-image: adp-release-auto
+      docker-flags:
+        - -v /etc/group:/etc/group:ro
+        - -v /etc/passwd:/etc/passwd:ro
+        - -v '${env.HELM_REPO_CREDENTIALS}':'${env.HELM_REPO_CREDENTIALS}'
+        - --env GERRIT_USERNAME="${env.GERRIT_USERNAME}"
+        - --env GERRIT_PASSWORD="${env.GERRIT_PASSWORD}"
+        - --env GIT_REPO_URL="${git_repo_url}"
+        - --env CHART_PATH="${int_chart_path}"
+        - --env HELM_INTERNAL_REPO="${chart-repo-internal}"
+        - --env HELM_DROP_REPO="${chart-repo-internal}"
+        - --env HELM_RELEASED_REPO="${chart-repo-internal}"
+        - --env ARM_API_TOKEN="${env.ARM_API_TOKEN}"
+        - --env ALLOW_DOWNGRADE="true"
+        - --env CHART_NAME="${env.CHART_NAME}"
+        - --env CHART_VERSION="${env.CHART_VERSION}"
+        - --env CHART_REPO="${env.CHART_REPO}"
+        - --env IGNORE_NON_RELEASED="false"
+        - --env AUTOMATIC_RELEASE="false"
+        - --env ALWAYS_RELEASE="false"
+        - --env HELM_REPO_CREDENTIALS="${env.HELM_REPO_CREDENTIALS}"
+        - --env CI_HELM="true"
+        - --env GERRIT_REFSPEC=${env.GERRIT_REFSPEC}
+      cmd:
+        - ihc-auto prepare
+
+  publish:
+    - task: publish-chart
+      docker-image: adp-release-auto
+      docker-flags:
+        - -v /etc/group:/etc/group:ro
+        - -v /etc/passwd:/etc/passwd:ro
+        - -v '${env.HELM_REPO_CREDENTIALS}':'${env.HELM_REPO_CREDENTIALS}'
+        - --env GERRIT_USERNAME="${env.GERRIT_USERNAME}"
+        - --env GERRIT_PASSWORD="${env.GERRIT_PASSWORD}"
+        - --env GIT_REPO_URL="${git_repo_url}"
+        - --env CHART_PATH="${int_chart_path}"
+        - --env HELM_INTERNAL_REPO="${chart-repo-drop}"
+        - --env HELM_DROP_REPO="${chart-repo-drop}"
+        - --env HELM_RELEASED_REPO="${chart-repo-drop}"
+        - --env ARM_API_TOKEN="${env.ARM_API_TOKEN}"
+        - --env ALLOW_DOWNGRADE="true"
+        - --env CHART_NAME="${env.CHART_NAME}"
+        - --env CHART_VERSION="${env.CHART_VERSION}"
+        - --env CHART_REPO="${env.CHART_REPO}"
+        - --env IGNORE_NON_RELEASED="false"
+        - --env AUTOMATIC_RELEASE="false"
+        - --env ALWAYS_RELEASE="false"
+        - --env HELM_REPO_CREDENTIALS="${env.HELM_REPO_CREDENTIALS}"
+        - --env CI_HELM="true"
+        - --env SKIP_COND="'proj-adp-pm-kube-state-metrics-released-helm-local' in CHART_REPO and '-' in CHART_VERSION"
+      cmd:
+        - ihc-auto publish

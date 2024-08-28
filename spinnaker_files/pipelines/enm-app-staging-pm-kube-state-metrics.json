@@ -1,0 +1,137 @@
+{
+  "application": "APPLICATION_NAME",
+ "disabled": false,
+ "keepWaitingPipelines": true,
+ "name": "PIPELINE_NAME",
+ "notifications": [
+   {
+     "address": "Thunderbird@tcscomprod.onmicrosoft.com",
+     "cc": "",
+     "level": "pipeline",
+     "type": "email",
+     "when": [
+       "pipeline.failed"
+     ]
+   }
+ ],
+ "parameterConfig": [
+   {
+     "default": "",
+     "description": "",
+     "hasOptions": false,
+     "label": "",
+     "name": "CHART_NAME",
+     "options": [
+       {
+         "value": ""
+       }
+     ],
+     "pinned": false,
+     "required": false
+   },
+   {
+     "default": "",
+     "description": "",
+     "hasOptions": false,
+     "label": "",
+     "name": "CHART_VERSION",
+     "options": [
+       {
+         "value": ""
+       }
+     ],
+     "pinned": false,
+     "required": false
+   },
+   {
+     "default": "",
+     "description": "",
+     "hasOptions": false,
+     "label": "",
+     "name": "CHART_REPO",
+     "options": [
+       {
+         "value": ""
+       }
+     ],
+     "pinned": false,
+     "required": false
+   }
+ ],
+ "stages": [
+   {
+     "continuePipeline": false,
+     "failPipeline": true,
+     "job": "eric-enm-int-pm-kube-state-metrics-prepare",
+     "master": "FEM_CONTROLLER",
+     "name": "eric-enm-int-pm-kube-state-metrics-prepare",
+     "parameters": {
+       "CHART_NAME": "${parameters['CHART_NAME']}",
+       "CHART_REPO": "${parameters['CHART_REPO']}",
+       "CHART_VERSION": "${parameters['CHART_VERSION']}"
+     },
+     "propertyFile": "artifact.properties",
+     "refId": "1",
+     "requisiteStageRefIds": [],
+     "type": "jenkins"
+   },
+   {
+     "continuePipeline": false,
+     "failPipeline": true,
+     "job": "eric-enm-int-pm-kube-state-metrics-test",
+     "master": "FEM_CONTROLLER",
+     "name": "eric-enm-int-pm-kube-state-metrics-test",
+     "parameters": {
+       "INT_CHART_REPO": "${ #stage('eric-enm-int-pm-kube-state-metrics-prepare')['context']['INT_CHART_REPO'] }",
+       "INT_CHART_VERSION": "${ #stage('eric-enm-int-pm-kube-state-metrics-prepare')['context']['INT_CHART_VERSION'] }",
+       "NAMESPACE": "${ #stage('eric-enm-int-pm-kube-state-metrics-prepare')['context']['INT_CHART_NAME'] }"
+     },
+     "propertyFile": "",
+     "refId": "2",
+     "requisiteStageRefIds": [
+       "1"
+     ],
+     "type": "jenkins"
+   },
+   {
+     "continuePipeline": false,
+     "failPipeline": true,
+     "job": "eric-enm-int-pm-kube-state-metrics-publish",
+     "master": "FEM_CONTROLLER",
+     "name": "eric-enm-int-pm-kube-state-metrics-publish",
+     "parameters": {
+       "CHART_NAME": "${parameters['CHART_NAME']}",
+       "CHART_REPO": "${parameters['CHART_REPO']}",
+       "CHART_VERSION": "${parameters['CHART_VERSION']}"
+     },
+     "propertyFile": "artifact.properties",
+     "refId": "4",
+     "requisiteStageRefIds": [
+       "2"
+     ],
+     "type": "jenkins"
+   },
+   {
+     "application": "cn-enm-adp-staging",
+     "failPipeline": true,
+     "name": "ENM-eric-pm-kube-state-metrics-Staging-2-Flow",
+     "pipeline": "1f71248b-cee3-43f2-af40-b1b1d3728edc",
+     "pipelineParameters": {
+       "CHART_NAME": "${ #stage('enm-app-staging-publish')['context']['INT_CHART_NAME'] }",
+       "CHART_REPO": "${ #stage('enm-app-staging-publish')['context']['INT_CHART_REPO'] }",
+       "CHART_VERSION": "${ #stage('enm-app-staging-publish')['context']['INT_CHART_VERSION'] }"
+     },
+     "refId": "6",
+     "requisiteStageRefIds": [
+       "4"
+     ],
+     "stageEnabled": {
+       "expression": "${ #stage('eric-enm-int-pm-kube-state-metrics-publish')['context']['SKIPPED'] ?: 'false' } != true",
+       "type": "expression"
+     },
+     "type": "pipeline",
+     "waitForCompletion": true
+   }
+ ],
+ "triggers": []
+}

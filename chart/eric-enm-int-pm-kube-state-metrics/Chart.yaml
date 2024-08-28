@@ -1,0 +1,10 @@
+apiVersion: v2
+appVersion: '1.0'
+dependencies:
+- condition: eric-pm-kube-state-metrics.enabled
+  name: eric-pm-kube-state-metrics
+  repository: https://arm.seli.gic.ericsson.se/artifactory/proj-adp-pm-kube-state-metrics-drop-helm
+  version: 2.15.0-1
+description: A Helm chart for PM Kube State Metrics integration
+name: eric-enm-int-pm-kube-state-metrics
+version: 0.0.1-54

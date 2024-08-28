@@ -1,0 +1,41 @@
+global:
+  registry:
+    url: armdocker.rnd.ericsson.se
+    pullSecret:
+    imagePullPolicy: "IfNotPresent"
+  pullSecret:
+  security:
+    tls:
+      enabled: false
+imageCredentials:
+  pullSecret:
+  registry:
+    url:
+    imagePullPolicy:
+  repoPath:
+
+eric-pm-kube-state-metrics:
+  enabled: true
+  global:
+    security:
+      tls:
+        enabled: false
+  kubeStateMetrics:
+    enabled: true
+    createRole: true
+    serviceAccountName: "eric-pm-kube-state-metrics"
+    service:
+      servicePort: 8080
+      annotations:
+        iskubeStateMetrics: "true"
+    args:
+      resources: nodes, pods, jobs, cronjobs, statefulsets, deployments
+  updateStrategy:
+    ericPmKubeStateMetrics:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 1
+        maxSurge: 0
+  rbac:
+    appMonitoring:
+      enabled: true
